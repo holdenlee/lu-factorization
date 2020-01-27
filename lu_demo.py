@@ -114,7 +114,7 @@ def render_latex(a_old, a, L_old,L, i, k, m, step=1, aip=None):
 
 def render_latex_p(a_old, a, L_old,L, p, P, i, k, m, step=1, aip=None):
   n = a.shape[0]
-  saip = "" if aip is None else "\\quad\\quad "+render_matrix(aip, options_f = lambda i1,j1: id)
+  saip = "" if aip is None else "\\quad\\quad "+render_matrix(aip, options_f = lambda i1,j1: color("purple") if p_inv(p)[i1]>j1 and (j1,p_inv(p)[i1])<=(k,i) else id)
     #requires p inverse to color...
   s0 = "\\begin{align*} k &= %d & i &= %d & p(%d) &= %d & p(%d) &= %d\\end{align*}" % (k+1, i+1, k+1, p[k]+1, i+1, p[i]+1)
   s1 = "$$PA=%s P \\boxed{%s} %s$$" % (render_matrix(L_old), render_matrix(a_old, options_f = compose2(
@@ -142,9 +142,9 @@ def render_latex_p(a_old, a, L_old,L, p, P, i, k, m, step=1, aip=None):
 
 def render_p(a, L, p_old, p, P_old, P, k, to_swap, aip=None):
   n = a.shape[0]
-  saip = "" if aip is None else "\\quad\\quad "+render_matrix(aip, options_f = lambda i1,j1: color("purple") if i1>j1 and j1<k else id)
-  s0 = "\\begin{align*} k &= {\\color{red}%d} & p({\\color{blue}%d}) &= %d\\end{align*}" % (k+1, to_swap+1, p[to_swap]+1)
-  s1 = "$$PA=%s P %s %s$$" % (render_matrix(L), render_matrix(a, options_f = lambda i1, j1: boxed if (i1,j1)==(p[k],k) else id), saip)
+  saip = "" if aip is None else "\\quad\\quad "+render_matrix(aip, options_f = lambda i1,j1: color("purple") if p_inv(p)[i1]>j1 and j1<k else id)
+  s0 = "\\begin{align*} k &= {\\color{red}%d} & p({\\color{blue}%d}) &= %d\\end{align*}" % (k+1, to_swap+1, p_old[to_swap]+1)
+  s1 = "$$P_{\\text{new}}A=%s P_{\\text{new}} %s %s$$" % (render_matrix(L, options_f = lambda i1,j1: color("purple") if (i1==k or i1==to_swap) and j1<k else id), render_matrix(a, options_f = lambda i1, j1: boxed if (i1,j1)==(p[k],k) else id), saip)
   s_p_old = render_matrix(p_old,delimiter="B",plus_one=True)
   s_P_old = render_matrix(P_old)
   s_p = render_matrix(p,delimiter="B",plus_one=True)
@@ -192,7 +192,14 @@ def amax(indices, f):
     if cur_max is None or cur>cur_max:
       cur_max = cur
       cur_i = i
-  return i
+  return cur_i
+
+def p_inv(p):
+  n = len(p)
+  pinv = np.zeros(n, dtype=np.int8)
+  for i in range(n):
+    pinv[p[i]]=i
+  return pinv
 
 def p_swap(n,i,j):
   return np.asarray([j if k==i else \
@@ -215,12 +222,15 @@ def lu_pivot(a, pivot_rule ="Partial" , ip=False):
   P = np.eye(n)
   pages=["\\begin{center}LU Decomposition, %s pivoting\\end{center} $$A = %s$$" % (pivot_rule, render_matrix(a))]
   for k in range(n-1):
-    to_swap = amax(range(k+1,n),lambda i: a[p[i],k])
+    to_swap = amax(range(k,n),lambda i: abs(a[p[i],k]))
     p_old = p.copy()
     P_old = P.copy()
     p = p_compose(p_swap(n,k,to_swap),p)
     P = p_to_matrix(p)
-    pages+=[render_p(a, L, p_old, p, P_old, P, k, to_swap, aip=None)]
+    # do swap on L
+    P_swap = p_to_matrix(p_swap(n,k,to_swap))
+    L = np.matmul(P_swap,np.matmul(L,np.transpose(P_swap)))
+    pages+=[render_p(a, L, p_old, p, P_old, P, k, to_swap, aip=aip if ip else None)]
     for i in range(k+1,n):
       a_old = a.copy()
       L_old = L.copy()
@@ -238,10 +248,20 @@ def lu_pivot(a, pivot_rule ="Partial" , ip=False):
   return(doc)
 
 if __name__ == "__main__":
-    a = np.asarray([[2.0,-1,-1],[3,3,9],[3,3,5]])
-    io_file("template.tex", "lu_no_pivot.tex", lambda s: s%(lu_no_pivot(a)))
-    a = np.asarray([[2.0,-1,-1],[3,3,9],[3,3,5]])
-    io_file("template.tex", "lu_no_pivot_in_place.tex", lambda s: s%(lu_no_pivot(a, True)))
+    #a = np.asarray([[2.0,-1,-1],[3,3,9],[3,3,5]])
+    #io_file("template.tex", "lu_no_pivot.tex", lambda s: s%(lu_no_pivot(a)))
+    #a = np.asarray([[2.0,-1,-1],[3,3,9],[3,3,5]])
+    #io_file("template.tex", "lu_no_pivot_in_place.tex", lambda s: s%(lu_no_pivot(a, True)))
+    a = np.asarray([[1.0,5,0],[4,8,12],[2,8,10]])
+    io_file("template.tex", "lu_no_pivot2.tex", lambda s: s%(lu_no_pivot(a)))
+    a = np.asarray([[1.0,5,0],[4,8,12],[2,8,10]])
+    io_file("template.tex", "lu_no_pivot_in_place2.tex", lambda s: s%(lu_no_pivot(a, True)))
     a = np.asarray([[1.0,2,4],[1,0,1],[-2,2,4]])
-    #print(lu_pivot(a))
-    io_file("template.tex", "lu_partial_pivot.tex", lambda s: s%(lu_pivot(a)))
+    ##print(lu_pivot(a))
+    io_file("template.tex", "lu_partial_pivot.tex", lambda s: s%(lu_pivot(a, ip=True)))
+    #a = np.asarray([[1,1,1],[1,1.0001,2],[1,2,2]])
+    #io_file("template.tex", "lu_no_pivot_stability.tex", lambda s: s%(lu_no_pivot(a)))
+    a = np.asarray([[1,1,1],[1,1.0001,2],[1,2,2]])
+    io_file("template.tex", "lu_pivot_stability.tex", lambda s: s%(lu_pivot(a, ip=True)))
+    a = np.asarray([[1.0,5,0],[4,8,12],[2,8,10]])
+    io_file("template.tex", "lu_partial_pivot2.tex", lambda s: s%(lu_pivot(a, ip=True)))
